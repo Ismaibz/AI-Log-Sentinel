@@ -5,6 +5,7 @@ log_level = "INFO"
 [secrets]
 vault_path = "./secrets.vibe"
 project_id = "default"
+file_key = false
 
 [anonymization]
 enabled = true

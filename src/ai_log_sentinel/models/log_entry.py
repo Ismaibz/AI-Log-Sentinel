@@ -1,5 +1,16 @@
-"""Structured log entry model."""
+from dataclasses import dataclass
+from datetime import datetime
 
-# TODO: LogEntry dataclass
-#   timestamp, source_ip, method, path, status_code,
-#   response_size, user_agent, referer, raw_line, source_label
+
+@dataclass
+class LogEntry:
+    timestamp: datetime
+    source_ip: str
+    method: str
+    path: str
+    status_code: int
+    response_size: int
+    user_agent: str
+    referer: str
+    raw_line: str
+    source_label: str
