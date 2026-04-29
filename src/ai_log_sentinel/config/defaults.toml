@@ -1,0 +1,85 @@
+[general]
+app_name = "AI-Log-Sentinel"
+log_level = "INFO"
+
+[secrets]
+vault_path = "./secrets.vibe"
+project_id = "default"
+
+[anonymization]
+enabled = true
+token_ttl = 3600
+
+[anonymization.patterns]
+ipv4 = true
+ipv6 = true
+email = true
+url_sensitive = true
+path_ids = true
+
+[noise_filter]
+enabled = true
+static_extensions = [
+    ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg",
+    ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".mp3", ".pdf", ".zip",
+]
+health_paths = ["/health", "/healthz", "/ping", "/alive", "/ready"]
+ignore_status_codes = []
+
+[pipeline]
+batch_size = 10
+batch_interval = 30
+max_queue_size = 1000
+
+[reasoning]
+flash_model = "gemini-1.5-flash"
+pro_model = "gemini-1.5-pro"
+escalation_confidence = 0.6
+rate_limit = 15
+rate_limit_period = 60
+request_timeout = 30
+max_retries = 3
+
+[reasoning.escalation]
+always_escalate = ["exploit_attempt", "bruteforce"]
+always_escalate_severity = ["high", "critical"]
+
+[tailer]
+poll_interval = 0.5
+offset_dir = ".offsets"
+
+[alerting]
+enabled = true
+channels = ["console"]
+min_severity = "medium"
+
+[alerting.telegram]
+chat_id = ""
+
+[alerting.slack]
+webhook_url = ""
+
+[mitigation]
+enabled = true
+dry_run = true
+auto_approve_severity = []
+
+[mitigation.hitl]
+timeout = 300
+
+[mitigation.executor]
+nginx_config_dir = "/etc/nginx/conf.d"
+nginx_reload_cmd = "sudo nginx -s reload"
+ufw_cmd = "sudo ufw"
+rollback_on_failure = true
+
+[langgraph]
+enabled = false
+autonomy_level = "suggest"
+max_cycles = 3
+verification_delay = 60
+
+[langgraph.autonomy]
+auto_approve = []
+require_approval = ["block_ip", "block_path"]
+never_auto = ["ufw"]

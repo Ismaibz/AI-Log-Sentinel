@@ -1,6 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[codz]
+*.py[cod]
 *$py.class
 
 # C extensions
@@ -220,5 +220,6 @@ __marimo__/
 AGENTS.md
 package-lock.json
 secrets.vibe
-docs/
 devinDeepWiki.json
+.offsets/
+tasks/
