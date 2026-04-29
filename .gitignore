@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+AGENTS.md
+package-lock.json
+secrets.vibe
+docs/
+devinDeepWiki.json
