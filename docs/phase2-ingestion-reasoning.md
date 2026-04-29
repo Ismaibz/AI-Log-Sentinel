@@ -229,17 +229,19 @@ class RecommendedAction(str, Enum):
 
 @dataclass
 class ThreatAssessment:
-    entries: list[AnonymizedEntry]
+    # NOTE: entries are NOT stored in the model. The orchestrator maintains
+    # the mapping assessment → list[AnonymizedEntry] externally for cleaner
+    # serialization and logging.
     category: ThreatCategory
     severity: Severity
     confidence: float
     summary: str
-    indicators: list[str]
-    recommended_action: RecommendedAction
-    action_details: str
-    mitre_ttps: list[str]
-    analyzed_by: str  # "flash" or "pro"
-    timestamp: datetime
+    indicators: list[str] = field(default_factory=list)
+    recommended_action: RecommendedAction = RecommendedAction.ALERT_ONLY
+    action_details: dict[str, Any] = field(default_factory=dict)
+    mitre_ttps: list[str] = field(default_factory=list)
+    analyzed_by: str = ""  # "flash" or "pro"
+    timestamp: datetime | None = None
 ```
 
 ### 8. Pipeline Orchestrator (`src/ai_log_sentinel/pipeline/orchestrator.py`)

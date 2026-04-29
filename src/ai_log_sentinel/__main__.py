@@ -24,8 +24,20 @@ def run(config: str | None, verbose: bool) -> None:
     level = "DEBUG" if verbose else "INFO"
     setup_logging(level)
     settings = Settings(config_path=config)
-    click.echo(f"Pipeline starting (model={settings.get('reasoning.flash_model')})")
-    click.echo("Pipeline not yet implemented — exiting.")
+
+    async def _start() -> None:
+        api_key = await settings.get_secret("GEMINI_API_KEY")
+        from ai_log_sentinel.pipeline.orchestrator import PipelineOrchestrator
+
+        orchestrator = PipelineOrchestrator(config=settings.raw, api_key=api_key)
+        click.echo(
+            f"Pipeline starting "
+            f"(model={settings.get('reasoning.flash_model')}, "
+            f"sources={len(orchestrator.sources)})"
+        )
+        await orchestrator.run()
+
+    asyncio.run(_start())
 
 
 @cli.command("test-config")
