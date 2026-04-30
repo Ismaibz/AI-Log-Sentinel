@@ -56,14 +56,13 @@ min_severity = "medium"
 
 [alerting.telegram]
 chat_id = ""
-
-[alerting.slack]
-webhook_url = ""
+bot_token_secret = "TELEGRAM_BOT_TOKEN"
 
 [mitigation]
 enabled = true
 dry_run = true
 auto_approve_severity = []
+data_dir = "data"
 
 [mitigation.hitl]
 timeout = 300
