@@ -17,7 +17,7 @@ class LogSource:
 
 
 def load_sources(config: dict[str, Any]) -> list[LogSource]:
-    raw_sources = config.get("sources")
+    raw_sources = config.get("sources") or config.get("pipeline", {}).get("log_sources")
     if not raw_sources:
         return []
 

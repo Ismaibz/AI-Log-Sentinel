@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from ai_log_sentinel.alerting.dispatcher import AlertDispatcher
@@ -95,9 +94,9 @@ class TelegramDispatcher(AlertDispatcher):
         await self._application.updater.start_polling()
         logger.info("Telegram bot polling started")
 
-    def stop_polling(self) -> None:
+    async def stop_polling(self) -> None:
         if self._application is not None:
-            self._stop_task = asyncio.create_task(self._stop_application())
+            await self._stop_application()
 
     async def _stop_application(self) -> None:
         if self._application is None:

@@ -89,8 +89,8 @@ class ThreatCategorizer:
             confidence=confidence,
             summary=result.get("summary", ""),
             indicators=result.get("indicators", []),
-            recommended_action=RecommendedAction.ALERT_ONLY,
-            action_details={},
+            recommended_action=self._parse_action(result.get("recommended_action", "alert_only")),
+            action_details=self._extract_action_details(result.get("action_details", {})),
             mitre_ttps=[],
             analyzed_by="flash",
             timestamp=datetime.now(timezone.utc),
@@ -147,8 +147,23 @@ class ThreatCategorizer:
             summary=summary if isinstance(summary, str) else "Pro analysis",
             indicators=[],
             recommended_action=recommended_action,
-            action_details={"details": result.get("action_details", "")},
+            action_details=self._extract_action_details(result.get("action_details", {})),
             mitre_ttps=result.get("mitre_ttps", []),
             analyzed_by="pro",
             timestamp=datetime.now(timezone.utc),
         )
+
+    @staticmethod
+    def _parse_action(value: Any) -> RecommendedAction:
+        try:
+            return RecommendedAction(value)
+        except (ValueError, KeyError):
+            return RecommendedAction.ALERT_ONLY
+
+    @staticmethod
+    def _extract_action_details(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            return {"details": value}
+        return {}

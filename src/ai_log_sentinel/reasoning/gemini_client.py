@@ -36,9 +36,9 @@ class GeminiClient:
     async def analyze_pro(self, prompt: str, log_batch: str) -> str:
         return await self._call(self._pro_model, prompt, log_batch)
 
-    async def _call(self, model: str, prompt: str, content: str) -> str:
+    async def _call(self, model: str, prompt: str, _content: str = "") -> str:
         await self._rate_limiter.acquire()
-        text = f"{prompt}\n\n{content}"
+        text = prompt
 
         for attempt in range(self._max_retries):
             try:
@@ -68,9 +68,9 @@ class GeminiClient:
                 status_code = _extract_status(exc)
 
                 if status_code == 429:
-                    backoff = 2**attempt
+                    backoff = min(2**attempt + random.uniform(0, 2), 30)
                     logger.warning(
-                        "Rate limited, backoff %ds (%d/%d)",
+                        "Rate limited, backoff %.1fs (%d/%d)",
                         backoff,
                         attempt + 1,
                         self._max_retries,
@@ -79,15 +79,15 @@ class GeminiClient:
                     continue
 
                 if status_code is not None and 500 <= status_code < 600:
-                    jitter = random.uniform(1, 3)
+                    backoff = min(2**attempt + random.uniform(0, 2), 30)
                     logger.warning(
-                        "Server error %s, retry %.1fs (%d/%d)",
+                        "Server error %s, retry %ds (%d/%d)",
                         status_code,
-                        jitter,
+                        backoff,
                         attempt + 1,
                         self._max_retries,
                     )
-                    await asyncio.sleep(jitter)
+                    await asyncio.sleep(backoff)
                     continue
 
                 logger.exception("Gemini API call failed")

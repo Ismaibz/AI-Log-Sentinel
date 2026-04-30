@@ -36,10 +36,10 @@ max_queue_size = 1000
 flash_model = "gemini-2.5-flash"
 pro_model = "gemini-2.5-pro"
 escalation_confidence = 0.6
-rate_limit = 15
+rate_limit = 8
 rate_limit_period = 60
-request_timeout = 30
-max_retries = 3
+request_timeout = 45
+max_retries = 5
 
 [reasoning.escalation]
 always_escalate = ["exploit_attempt", "bruteforce"]

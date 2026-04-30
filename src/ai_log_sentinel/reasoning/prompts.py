@@ -16,8 +16,19 @@ def build_flash_prompt(batch: str) -> str:
         '  "confidence": 0.0 to 1.0,\n'
         '  "summary": "one-line English summary of the observed activity",\n'
         '  "indicators":'
-        ' ["list of specific observable strings that drove your decision"]\n'
+        ' ["list of specific observable strings that drove your decision"],\n'
+        '  "recommended_action": "block_ip" | "block_path"'
+        ' | "rate_limit" | "alert_only" | "investigate",\n'
+        '  "action_details": {\n'
+        '    "ip": "the attacker IP token exactly as it appears in the logs, or null",\n'
+        '    "ips": ["all attacker IP tokens from the logs"],\n'
+        '    "path": "the targeted path exactly as in the logs, or null",\n'
+        '    "paths": ["all targeted paths from the logs"]\n'
+        "  }\n"
         "}\n\n"
+        "CRITICAL: Extract IP addresses and paths EXACTLY as they appear in the logs. "
+        "Do NOT invent or guess values. If the log shows [IP_001], return [IP_001]. "
+        "If the log shows /admin, return /admin.\n\n"
         "Anonymized log entries:\n\n"
         f"{batch}"
     )
@@ -49,9 +60,19 @@ def build_pro_prompt(
         '  "mitre_ttps": ["T1190", "..."],\n'
         '  "recommended_action": "block_ip" | "block_path"'
         ' | "rate_limit" | "alert_only" | "investigate",\n'
-        '  "action_details": "specific recommended steps",\n'
+        '  "action_details": {\n'
+        '    "ip": "the attacker IP token exactly as it appears in the logs, or null",\n'
+        '    "ips": ["all attacker IP tokens from the logs"],\n'
+        '    "path": "the targeted path exactly as in the logs, or null",\n'
+        '    "paths": ["all targeted paths from the logs"],\n'
+        '    "zone_name": "name for rate limit zone (if rate_limit)",\n'
+        '    "rate": "rate limit string like 10r/m (if rate_limit)"\n'
+        "  },\n"
         '  "summary": "detailed one-line English summary"\n'
         "}\n\n"
+        "CRITICAL: Extract IP addresses and paths EXACTLY as they appear in the logs. "
+        "Do NOT invent or guess values. If the log shows [IP_001], return [IP_001]. "
+        "If the log shows /admin, return /admin.\n\n"
         "Anomalous anonymized log entries:\n\n"
         f"{batch}"
     )

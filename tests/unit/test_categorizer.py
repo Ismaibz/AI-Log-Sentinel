@@ -112,20 +112,28 @@ class TestShouldEscalate:
         result = {"category": "suspicious", "confidence": 0.3, "severity": "low"}
         assert should_escalate(result, escalation_config) is True
 
-    def test_exploit_attempt_always_escalate(self, escalation_config):
+    def test_exploit_attempt_high_conf_no_escalate(self, escalation_config):
         result = {"category": "exploit_attempt", "confidence": 0.9, "severity": "low"}
-        assert should_escalate(result, escalation_config) is True
+        assert should_escalate(result, escalation_config) is False
 
-    def test_bruteforce_always_escalate(self, escalation_config):
+    def test_bruteforce_high_conf_no_escalate(self, escalation_config):
         result = {"category": "bruteforce", "confidence": 0.9, "severity": "low"}
-        assert should_escalate(result, escalation_config) is True
+        assert should_escalate(result, escalation_config) is False
 
-    def test_high_severity_escalate(self, escalation_config):
+    def test_high_severity_high_conf_no_escalate(self, escalation_config):
         result = {"category": "suspicious", "confidence": 0.9, "severity": "high"}
+        assert should_escalate(result, escalation_config) is False
+
+    def test_critical_severity_high_conf_no_escalate(self, escalation_config):
+        result = {"category": "suspicious", "confidence": 0.9, "severity": "critical"}
+        assert should_escalate(result, escalation_config) is False
+
+    def test_suspicious_medium_conf_escalate(self, escalation_config):
+        result = {"category": "suspicious", "confidence": 0.5, "severity": "medium"}
         assert should_escalate(result, escalation_config) is True
 
-    def test_critical_severity_escalate(self, escalation_config):
-        result = {"category": "suspicious", "confidence": 0.9, "severity": "critical"}
+    def test_scan_medium_conf_escalate(self, escalation_config):
+        result = {"category": "scan", "confidence": 0.7, "severity": "medium"}
         assert should_escalate(result, escalation_config) is True
 
     def test_normal_no_escalate(self, escalation_config):
@@ -180,7 +188,7 @@ class TestThreatCategorizer:
         assert mock.flash_calls == 1
         assert mock.pro_calls == 1
 
-    async def test_exploit_attempt_escalates(self, categorizer_config):
+    async def test_exploit_attempt_stays_flash(self, categorizer_config):
         exploit_flash = json.dumps(
             {
                 "category": "exploit_attempt",
@@ -196,8 +204,8 @@ class TestThreatCategorizer:
         entries = [_make_entry("GET /../../etc/passwd HTTP/1.1 200")]
         results = await cat.categorize(entries)
         assert len(results) == 1
-        assert results[0].analyzed_by == "pro"
-        assert mock.pro_calls == 1
+        assert results[0].analyzed_by == "flash"
+        assert mock.pro_calls == 0
 
     async def test_malformed_json_response(self, categorizer_config):
         cat, _mock = await self._make_categorizer(categorizer_config, flash_response="not json")

@@ -162,7 +162,7 @@ class TestParserToCategorizer:
             assert isinstance(assessment.severity, Severity)
             assert 0.0 <= assessment.confidence <= 1.0
 
-    async def test_exploit_escalates_to_pro(self) -> None:
+    async def test_exploit_stays_flash(self) -> None:
         entries = _parse_all(_nginx_lines(), "nginx-test")
         engine = AnonymizationEngine(BASIC_CONFIG)
         anonymized = [engine.anonymize(e) for e in entries]
@@ -171,9 +171,8 @@ class TestParserToCategorizer:
         categorizer = ThreatCategorizer(client=client, config=BASIC_CONFIG)
         results = await categorizer.categorize(anonymized)
 
-        assert client.pro_calls > 0
-        pro_assessments = [r for r in results if r.analyzed_by == "pro"]
-        assert len(pro_assessments) > 0
+        assert client.pro_calls == 0
+        assert all(r.analyzed_by == "flash" for r in results)
 
 
 @pytest.mark.integration
