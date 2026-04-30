@@ -15,12 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiClient:
-    FLASH_MODEL = "gemini-1.5-flash"
-    PRO_MODEL = "gemini-1.5-pro"
+    FLASH_MODEL_DEFAULT = "gemini-2.5-flash"
+    PRO_MODEL_DEFAULT = "gemini-2.5-pro"
 
     def __init__(self, api_key: str, config: dict[str, Any]) -> None:
         self._client = genai.Client(api_key=api_key)
         reasoning = config.get("reasoning", {})
+        self._flash_model = reasoning.get("flash_model", self.FLASH_MODEL_DEFAULT)
+        self._pro_model = reasoning.get("pro_model", self.PRO_MODEL_DEFAULT)
         self._rate_limiter = RateLimiter(
             max_calls=reasoning.get("rate_limit", 15),
             period=reasoning.get("rate_limit_period", 60),
@@ -29,10 +31,10 @@ class GeminiClient:
         self._max_retries = reasoning.get("max_retries", 3)
 
     async def analyze_flash(self, prompt: str, log_batch: str) -> str:
-        return await self._call(self.FLASH_MODEL, prompt, log_batch)
+        return await self._call(self._flash_model, prompt, log_batch)
 
     async def analyze_pro(self, prompt: str, log_batch: str) -> str:
-        return await self._call(self.PRO_MODEL, prompt, log_batch)
+        return await self._call(self._pro_model, prompt, log_batch)
 
     async def _call(self, model: str, prompt: str, content: str) -> str:
         await self._rate_limiter.acquire()
