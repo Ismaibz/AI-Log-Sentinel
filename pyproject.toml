@@ -16,6 +16,13 @@ dependencies = [
     "aiofiles>=23.0.0",
 ]
 
+[tool.uv]
+extra-index-url = ["https://test.pypi.org/simple/"]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+
 [project.optional-dependencies]
 telegram = ["python-telegram-bot>=20.0"]
 slack = ["slack-sdk>=3.0"]
