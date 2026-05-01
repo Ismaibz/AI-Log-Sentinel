@@ -103,20 +103,20 @@ class RuleGenerator:
             ip = self._resolve_ip(str(raw_ip))
             rules.append(
                 MitigationRule(
-                    rule_type="ufw",
-                    command=f"{self._ufw_cmd} deny from {ip}",
-                    description=f"Block IP {ip} via UFW firewall{site_ctx}",
-                    critical=True,
-                    rollback_command=f"{self._ufw_cmd} delete deny from {ip}",
-                )
-            )
-            rules.append(
-                MitigationRule(
                     rule_type="nginx_deny",
                     command=f"deny {ip};",
                     description=f"Deny IP {ip} in Nginx{site_ctx}",
                     critical=True,
                     rollback_command=f"# remove: deny {ip};",
+                )
+            )
+            rules.append(
+                MitigationRule(
+                    rule_type="ufw",
+                    command=f"{self._ufw_cmd} deny from {ip}",
+                    description=f"Block IP {ip} via UFW firewall{site_ctx}",
+                    critical=True,
+                    rollback_command=f"{self._ufw_cmd} delete deny from {ip}",
                 )
             )
         return rules

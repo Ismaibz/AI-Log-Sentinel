@@ -46,13 +46,13 @@ class TestRuleGenerator:
         rules = gen.generate(threat)
 
         assert len(rules) == 2
-        assert rules[0].rule_type == "ufw"
-        assert rules[0].command == "sudo ufw deny from 1.2.3.4"
+        assert rules[0].rule_type == "nginx_deny"
+        assert rules[0].command == "deny 1.2.3.4;"
         assert rules[0].critical is True
-        assert rules[0].rollback_command == "sudo ufw delete deny from 1.2.3.4"
+        assert rules[0].rollback_command == "# remove: deny 1.2.3.4;"
 
-        assert rules[1].rule_type == "nginx_deny"
-        assert rules[1].command == "deny 1.2.3.4;"
+        assert rules[1].rule_type == "ufw"
+        assert rules[1].command == "sudo ufw deny from 1.2.3.4"
         assert rules[1].critical is True
 
     def test_block_ip_multiple_ips(self):
@@ -64,13 +64,13 @@ class TestRuleGenerator:
         rules = gen.generate(threat)
 
         assert len(rules) == 4
-        assert rules[0].rule_type == "ufw"
+        assert rules[0].rule_type == "nginx_deny"
         assert "1.2.3.4" in rules[0].command
-        assert rules[1].rule_type == "nginx_deny"
+        assert rules[1].rule_type == "ufw"
         assert "1.2.3.4" in rules[1].command
-        assert rules[2].rule_type == "ufw"
+        assert rules[2].rule_type == "nginx_deny"
         assert "5.6.7.8" in rules[2].command
-        assert rules[3].rule_type == "nginx_deny"
+        assert rules[3].rule_type == "ufw"
         assert "5.6.7.8" in rules[3].command
 
     def test_block_path_generates_nginx_deny(self):
@@ -156,8 +156,8 @@ class TestRuleGenerator:
         )
         rules = gen.generate(threat)
 
-        ufw_rule = rules[0]
-        assert ufw_rule.rollback_command.startswith("sudo ufw delete deny from")
-
-        nginx_rule = rules[1]
+        nginx_rule = rules[0]
         assert "# remove:" in nginx_rule.rollback_command
+
+        ufw_rule = rules[1]
+        assert ufw_rule.rollback_command.startswith("sudo ufw delete deny from")

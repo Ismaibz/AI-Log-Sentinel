@@ -70,18 +70,11 @@ class MitigationExecutor:
         for rule in alert.mitigation_rules:
             result = await self._run_command(rule, alert.id)
             results.append(result)
-            if not result.success and self.rollback_on_failure:
-                await self._rollback_results(results[:-1])
-                record = ExecutionRecord(
-                    alert_id=alert.id,
-                    results=results,
-                    success=False,
-                    executed_at=datetime.now(),
-                    dry_run=self.dry_run,
-                )
-                self._store_record(record)
-                alert.status = AlertStatus.FAILED
-                return record
+            if not result.success:
+                rule_type = rule.get("rule_type", "")
+                if rule_type.startswith("nginx") and self.rollback_on_failure:
+                    await self._rollback_results(results[:-1])
+                break
 
         success = all(r.success for r in results)
         record = ExecutionRecord(
