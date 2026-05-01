@@ -13,3 +13,6 @@ def setup_logging(level: str = "INFO") -> None:
         handlers=[RichHandler(show_time=False, show_path=False, rich_tracebacks=True)],
         force=True,
     )
+
+    for noisy in ("telegram", "httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
