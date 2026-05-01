@@ -84,6 +84,10 @@ class ThreatCategorizer:
 
             try:
                 result = json.loads(raw)
+                if isinstance(result, list):
+                    result = result[0] if result else {}
+                if not isinstance(result, dict):
+                    result = {}
             except (json.JSONDecodeError, TypeError, ValueError):
                 logger.warning("L2 fast JSON parse failed for batch starting at index %d", i)
                 assessments.append(self._make_parse_error_assessment(source_label))
@@ -158,6 +162,10 @@ class ThreatCategorizer:
 
         try:
             pro_result = json.loads(raw)
+            if isinstance(pro_result, list):
+                pro_result = pro_result[0] if pro_result else {}
+            if not isinstance(pro_result, dict):
+                pro_result = {}
         except (json.JSONDecodeError, TypeError, ValueError):
             logger.warning("L2 deep JSON parse failed, keeping fast result")
             return flash_assessment

@@ -145,8 +145,8 @@ class RuleGenerator:
     def _rate_limit_rules(
         self, details: dict[str, Any], source_label: str = ""
     ) -> list[MitigationRule]:
-        zone_name = details.get("zone_name", "threat_limit")
-        rate = details.get("rate", "10r/m")
+        zone_name = details.get("zone_name") or "threat_limit"
+        rate = details.get("rate") or "10r/m"
 
         site_ctx = f" (detected on {source_label})" if source_label else ""
         rules: list[MitigationRule] = []

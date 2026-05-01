@@ -130,7 +130,7 @@ class MitigationExecutor:
                 rollback_command=rollback_command,
             )
 
-        if rule_type.startswith("nginx"):
+        if rule_type.startswith("nginx") or rule_type == "rate_limit":
             return await self._run_nginx_command(rule_dict, alert_id)
 
         return await self._run_raw_command(command, rule_type, rollback_command)
