@@ -14,3 +14,4 @@ class AnonymizedEntry:
     tokens: dict[str, str] = field(default_factory=dict)
     is_noise: bool = False
     noise_reason: str | None = None
+    source_label: str = ""

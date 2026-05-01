@@ -64,3 +64,4 @@ class ThreatAssessment:
     mitre_ttps: list[str] = field(default_factory=list)
     analyzed_by: str = ""
     timestamp: datetime | None = None
+    source_label: str = ""

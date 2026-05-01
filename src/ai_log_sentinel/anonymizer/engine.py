@@ -38,6 +38,7 @@ class AnonymizationEngine:
             tokens=tokens,
             is_noise=is_noise,
             noise_reason=noise_reason,
+            source_label=entry.source_label,
         )
 
     def deanonymize(self, sanitized: str, tokens: dict[str, str]) -> str:

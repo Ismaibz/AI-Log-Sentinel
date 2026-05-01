@@ -28,3 +28,4 @@ class Alert:
     created_at: datetime = field(default_factory=datetime.now)
     resolved_at: datetime | None = None
     auto_action: bool = False
+    source_label: str = ""

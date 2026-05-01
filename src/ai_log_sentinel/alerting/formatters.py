@@ -69,6 +69,8 @@ def format_console(alert: Alert) -> str:
     info = Table(show_header=False, box=None, padding=0)
     info.add_column(style="bold cyan", width=13)
     info.add_column()
+    if alert.source_label:
+        info.add_row("Site:", alert.source_label)
     info.add_row("Category:", _category_display(t.category))
     info.add_row("Severity:", _severity_label(t.severity))
     info.add_row("Confidence:", f"{t.confidence:.2f}")
@@ -117,6 +119,8 @@ def format_telegram(alert: Alert) -> str:
 
     lines.append(f"\U0001f6a8 *{_escape_markdown_v2('THREAT DETECTED')}*")
     lines.append("")
+    if alert.source_label:
+        lines.append(f"*Site:* {_escape_markdown_v2(alert.source_label)}")
     lines.append(f"*Category:* {_escape_markdown_v2(_category_display(t.category))}")
     lines.append(f"*Severity:* {_escape_markdown_v2(t.severity.name)}")
     lines.append(f"*Confidence:* {_escape_markdown_v2(f'{t.confidence:.2f}')}")

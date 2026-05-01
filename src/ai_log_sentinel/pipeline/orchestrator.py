@@ -222,6 +222,7 @@ class PipelineOrchestrator:
                     }
                     for r in rules
                 ],
+                source_label=assessment.source_label,
             )
 
             status = await self.hitl.submit(alert)

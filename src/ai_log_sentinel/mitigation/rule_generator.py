@@ -40,6 +40,7 @@ class RuleGenerator:
     def generate(self, threat: ThreatAssessment) -> list[MitigationRule]:
         action = threat.recommended_action
         details = threat.action_details
+        source_label = threat.source_label
 
         if action == RecommendedAction.INVESTIGATE:
             action = self._infer_action(threat)
@@ -52,13 +53,13 @@ class RuleGenerator:
                 return []
 
         if action == RecommendedAction.BLOCK_IP:
-            return self._block_ip_rules(details)
+            return self._block_ip_rules(details, source_label)
 
         if action == RecommendedAction.BLOCK_PATH:
-            return self._block_path_rules(details)
+            return self._block_path_rules(details, source_label)
 
         if action == RecommendedAction.RATE_LIMIT:
-            return self._rate_limit_rules(details)
+            return self._rate_limit_rules(details, source_label)
 
         return []
 
@@ -89,11 +90,14 @@ class RuleGenerator:
             logger.warning("Failed to resolve anonymized IP token: %s", value)
         return value
 
-    def _block_ip_rules(self, details: dict[str, Any]) -> list[MitigationRule]:
+    def _block_ip_rules(
+        self, details: dict[str, Any], source_label: str = ""
+    ) -> list[MitigationRule]:
         ips = details.get("ips", [])
         if not ips:
             ips = [details.get("ip")] if details.get("ip") else []
 
+        site_ctx = f" (detected on {source_label})" if source_label else ""
         rules: list[MitigationRule] = []
         for raw_ip in ips:
             ip = self._resolve_ip(str(raw_ip))
@@ -101,7 +105,7 @@ class RuleGenerator:
                 MitigationRule(
                     rule_type="ufw",
                     command=f"{self._ufw_cmd} deny from {ip}",
-                    description=f"Block IP {ip} via UFW firewall",
+                    description=f"Block IP {ip} via UFW firewall{site_ctx}",
                     critical=True,
                     rollback_command=f"{self._ufw_cmd} delete deny from {ip}",
                 )
@@ -110,41 +114,47 @@ class RuleGenerator:
                 MitigationRule(
                     rule_type="nginx_deny",
                     command=f"deny {ip};",
-                    description=f"Deny IP {ip} in Nginx",
+                    description=f"Deny IP {ip} in Nginx{site_ctx}",
                     critical=True,
                     rollback_command=f"# remove: deny {ip};",
                 )
             )
         return rules
 
-    def _block_path_rules(self, details: dict[str, Any]) -> list[MitigationRule]:
+    def _block_path_rules(
+        self, details: dict[str, Any], source_label: str = ""
+    ) -> list[MitigationRule]:
         paths = details.get("paths", [])
         if not paths:
             paths = [details.get("path")] if details.get("path") else []
 
+        site_ctx = f" (detected on {source_label})" if source_label else ""
         rules: list[MitigationRule] = []
         for path in paths:
             rules.append(
                 MitigationRule(
                     rule_type="nginx_deny",
                     command=f"location {path} {{ deny all; }}",
-                    description=f"Deny all access to path {path}",
+                    description=f"Deny all access to path {path}{site_ctx}",
                     critical=True,
                     rollback_command=f"# remove: location {path} {{ deny all; }}",
                 )
             )
         return rules
 
-    def _rate_limit_rules(self, details: dict[str, Any]) -> list[MitigationRule]:
+    def _rate_limit_rules(
+        self, details: dict[str, Any], source_label: str = ""
+    ) -> list[MitigationRule]:
         zone_name = details.get("zone_name", "threat_limit")
         rate = details.get("rate", "10r/m")
 
+        site_ctx = f" (detected on {source_label})" if source_label else ""
         rules: list[MitigationRule] = []
         rules.append(
             MitigationRule(
                 rule_type="rate_limit",
                 command=f"limit_req_zone $binary_remote_addr zone={zone_name}:10m rate={rate};",
-                description=f"Rate limit zone '{zone_name}' at {rate}",
+                description=f"Rate limit zone '{zone_name}' at {rate}{site_ctx}",
                 critical=False,
                 rollback_command=f"# remove: limit_req_zone ... zone={zone_name}:10m ...",
             )
@@ -156,7 +166,7 @@ class RuleGenerator:
                 MitigationRule(
                     rule_type="rate_limit",
                     command=f"limit_req zone={zone_name};",
-                    description=f"Apply rate limit zone '{zone_name}' to {path}",
+                    description=f"Apply rate limit zone '{zone_name}' to {path}{site_ctx}",
                     critical=False,
                     rollback_command=f"# remove: limit_req zone={zone_name}; from {path}",
                 )

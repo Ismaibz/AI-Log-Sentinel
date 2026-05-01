@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def build_flash_prompt(batch: str, context_summary: str = "") -> str:
+def build_flash_prompt(batch: str, source_label: str = "", context_summary: str = "") -> str:
     parts: list[str] = []
 
     parts.append(
@@ -33,6 +33,9 @@ def build_flash_prompt(batch: str, context_summary: str = "") -> str:
         "If the log shows /admin, return /admin.\n"
     )
 
+    if source_label:
+        parts.append(f"\nLog source: {source_label}\n")
+
     if context_summary:
         parts.append(
             "\n=== PRE-ANALYSIS CONTEXT ===\n" f"{context_summary}\n" "=== END CONTEXT ===\n"
@@ -47,6 +50,7 @@ def build_pro_prompt(
     flash_category: str,
     flash_confidence: float,
     context: str,
+    source_label: str = "",
     context_summary: str = "",
 ) -> str:
     parts: list[str] = []
@@ -85,6 +89,9 @@ def build_pro_prompt(
         "Do NOT invent or guess values. If the log shows [IP_001], return [IP_001]. "
         "If the log shows /admin, return /admin.\n"
     )
+
+    if source_label:
+        parts.append(f"\nLog source: {source_label}\n")
 
     if context_summary:
         parts.append(

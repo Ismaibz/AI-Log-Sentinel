@@ -52,6 +52,8 @@ class ThreatCategorizer:
             batch = non_noise[i : i + self.batch_size]
             self._update_recent(batch)
 
+            source_label = self._resolve_source_label(batch)
+
             context_entries = list(self._recent)
             l1_results, consumed = self._local_rules.evaluate(context_entries)
             if l1_results:
@@ -75,17 +77,19 @@ class ThreatCategorizer:
             stats = BatchStats.compute(context_entries)
             context_summary = stats.to_summary_text()
 
-            prompt = build_flash_prompt(batch_str, context_summary=context_summary)
+            prompt = build_flash_prompt(
+                batch_str, source_label=source_label, context_summary=context_summary
+            )
             raw = await self.provider.analyze_fast(prompt)
 
             try:
                 result = json.loads(raw)
             except (json.JSONDecodeError, TypeError, ValueError):
                 logger.warning("L2 fast JSON parse failed for batch starting at index %d", i)
-                assessments.append(self._make_parse_error_assessment())
+                assessments.append(self._make_parse_error_assessment(source_label))
                 continue
 
-            assessment = self._build_assessment(result)
+            assessment = self._build_assessment(result, source_label)
             self._enrich_assessment(assessment, batch_str)
 
             if should_escalate(result, self.config):
@@ -102,7 +106,7 @@ class ThreatCategorizer:
         for entry in batch:
             self._recent.append(entry)
 
-    def _build_assessment(self, result: dict[str, Any]) -> ThreatAssessment:
+    def _build_assessment(self, result: dict[str, Any], source_label: str = "") -> ThreatAssessment:
         try:
             category = ThreatCategory(result.get("category", "normal"))
         except (ValueError, KeyError):
@@ -129,6 +133,7 @@ class ThreatCategorizer:
             mitre_ttps=result.get("mitre_ttps", []),
             analyzed_by="l2_fast",
             timestamp=datetime.now(timezone.utc),
+            source_label=source_label,
         )
 
     async def _escalate_to_deep(
@@ -146,6 +151,7 @@ class ThreatCategorizer:
             flash_result.get("category", "normal"),
             float(flash_result.get("confidence", 0.0)),
             batch_str,
+            source_label=flash_assessment.source_label,
             context_summary=context_summary,
         )
         raw = await self.deep_provider.analyze_deep(pro_prompt)
@@ -191,10 +197,11 @@ class ThreatCategorizer:
             mitre_ttps=result.get("mitre_ttps", []),
             analyzed_by="l2_deep",
             timestamp=datetime.now(timezone.utc),
+            source_label=fast_assessment.source_label,
         )
 
     @staticmethod
-    def _make_parse_error_assessment() -> ThreatAssessment:
+    def _make_parse_error_assessment(source_label: str = "") -> ThreatAssessment:
         return ThreatAssessment(
             category=ThreatCategory.NORMAL,
             severity=Severity.LOW,
@@ -202,7 +209,18 @@ class ThreatCategorizer:
             summary="parse error",
             analyzed_by="l2_fast",
             timestamp=datetime.now(timezone.utc),
+            source_label=source_label,
         )
+
+    @staticmethod
+    def _resolve_source_label(batch: list[AnonymizedEntry]) -> str:
+        counts: dict[str, int] = {}
+        for entry in batch:
+            label = entry.source_label
+            counts[label] = counts.get(label, 0) + 1
+        if not counts:
+            return ""
+        return max(counts, key=counts.get)  # type: ignore[arg-type]
 
     @staticmethod
     def _parse_action(value: Any) -> RecommendedAction:
