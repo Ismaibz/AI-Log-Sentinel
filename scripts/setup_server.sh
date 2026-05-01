@@ -60,6 +60,8 @@ step_create_user() {
         useradd -r -s /bin/false sentinel
         ok "Created system user 'sentinel'"
     fi
+    usermod -aG adm sentinel
+    ok "Added sentinel to adm group (log read access)"
 }
 
 step_create_sentinel_dir() {
