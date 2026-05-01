@@ -26,7 +26,7 @@ ask() {
     if [[ -n "$default" ]]; then
         prompt="$prompt [$default]"
     fi
-    read -rp "$prompt: " answer
+    read -rp "$prompt: " answer < /dev/tty
     echo "${answer:-$default}"
 }
 
@@ -34,7 +34,7 @@ ask_yes() {
     local prompt="$1"
     local default="${2:-n}"
     local answer
-    read -rp "$prompt [$default]: " answer
+    read -rp "$prompt [$default]: " answer < /dev/tty
     answer="${answer:-$default}"
     [[ "$answer" =~ ^[Yy] ]]
 }
@@ -89,30 +89,25 @@ step_patch_nginx_conf() {
     ok "Added sentinel.d include to nginx.conf"
 }
 
-step_detect_sites() {
-    local tmpfile="$1"
-    > "$tmpfile"
-
-    for conf in "$NGINX_CONF_DIR"/*.conf; do
-        [[ -f "$conf" ]] || continue
-        local server_names
-        server_names=$(grep -oP 'server_name\s+\K[^;]+' "$conf" 2>/dev/null || true)
-        [[ -n "$server_names" ]] || continue
-
-        local base
-        base=$(basename "$conf" .conf)
-        printf '%s\t%s\t%s\n' "$base" "$server_names" "$conf" >> "$tmpfile"
-    done
-
-    [[ -s "$tmpfile" ]]
+get_server_names() {
+    local conf="$1"
+    grep -oP 'server_name\s+\K[^;]+' "$conf" 2>/dev/null || true
 }
 
-step_configure_site() {
-    local base="$1"
-    local server_names="$2"
-    local conf="$3"
-    local out_name="$4"
-    local out_log="$5"
+get_access_log() {
+    local conf="$1"
+    grep -oP 'access_log\s+\K[^;]+' "$conf" 2>/dev/null | head -1 || true
+}
+
+configure_site() {
+    local conf="$1"
+    local base
+    base=$(basename "$conf" .conf)
+
+    local server_names
+    server_names=$(get_server_names "$conf")
+    [[ -n "$server_names" ]] || return 1
+
     local primary_name
     primary_name=$(echo "$server_names" | awk '{print $1}')
 
@@ -121,15 +116,15 @@ step_configure_site() {
 
     if grep -q "sentinel.d" "$conf" 2>/dev/null; then
         ok "Already includes sentinel.d — skipping"
-        return 0
+        return 1
     fi
 
     if ! ask_yes "Configure Sentinel for $primary_name?" "y"; then
-        return 0
+        return 1
     fi
 
     local access_log
-    access_log=$(grep -oP 'access_log\s+\K[^;]+' "$conf" 2>/dev/null | head -1 || true)
+    access_log=$(get_access_log "$conf")
 
     if [[ -z "$access_log" ]]; then
         access_log="/var/log/nginx/${base}_access.log"
@@ -141,6 +136,8 @@ step_configure_site() {
         else
             access_log=$(ask "Enter access_log path" "/var/log/nginx/${base}_access.log")
         fi
+    else
+        ok "access_log: $access_log"
     fi
 
     local sentinel_include="include ${SENTINEL_DIR}/*.conf;"
@@ -156,12 +153,10 @@ step_configure_site() {
     local source_name
     source_name=$(ask "Source name for config.toml" "$base-nginx")
 
-    printf -v "$out_name" '%s' "$source_name"
-    printf -v "$out_log" '%s' "$access_log"
+    echo "${source_name}|${access_log}"
 }
 
 step_install_sentinel_config() {
-    shift
     local sources=("$@")
 
     if [[ -f "$SENTINEL_CONFIG" ]]; then
@@ -177,6 +172,19 @@ step_install_sentinel_config() {
 
     local api_key
     api_key=$(ask "Gemini API key (or leave empty to set later)" "")
+
+    local sources_block=""
+    for src in "${sources[@]}"; do
+        local src_name="${src%%|*}"
+        local src_log="${src#*|}"
+        sources_block+="[[pipeline.log_sources]]
+name = \"${src_name}\"
+path = \"${src_log}\"
+format = \"nginx\"
+enabled = true
+
+"
+    done
 
     cat > "$SENTINEL_CONFIG" <<EOF
 [general]
@@ -201,20 +209,7 @@ batch_size = 5
 batch_interval = 10
 max_queue_size = 1000
 
-$(for src in "${sources[@]}"; do
-    local src_name src_log
-    src_name="${src%%|*}"
-    src_log="${src#*|}"
-    cat <<TOML
-[[pipeline.log_sources]]
-name = "${src_name}"
-path = "${src_log}"
-format = "nginx"
-enabled = true
-
-TOML
-done)
-[reasoning]
+${sources_block}[reasoning]
 provider = "gemini"
 
 [reasoning.gemini]
@@ -298,49 +293,38 @@ main() {
 
     require_root
 
-    info "Step 1/8: Create system user"
+    info "Step 1/7: Create system user"
     step_create_user
 
-    info "Step 2/8: Create sentinel nginx directory"
+    info "Step 2/7: Create sentinel nginx directory"
     step_create_sentinel_dir
 
-    info "Step 3/8: Patch nginx.conf"
+    info "Step 3/7: Patch nginx.conf"
     step_patch_nginx_conf
 
-    info "Step 4/8: Detect sites in $NGINX_CONF_DIR"
-    local sites_file
-    sites_file=$(mktemp)
-    if ! step_detect_sites "$sites_file"; then
-        error "No sites found in $NGINX_CONF_DIR"
-        rm -f "$sites_file"
-        exit 1
-    fi
-
+    info "Step 4/7: Configure sites"
     local sentinel_sources=()
-    while IFS=$'\t' read -r base server_names conf; do
-        local src_name="" src_log=""
-        step_configure_site "$base" "$server_names" "$conf" src_name src_log
-        if [[ -n "$src_name" ]]; then
-            sentinel_sources+=("${src_name}|${src_log}")
+    for conf in "$NGINX_CONF_DIR"/*.conf; do
+        [[ -f "$conf" ]] || continue
+        local result
+        if result=$(configure_site "$conf"); then
+            sentinel_sources+=("$result")
         fi
-    done < "$sites_file"
-    rm -f "$sites_file"
+    done
 
     if [[ ${#sentinel_sources[@]} -eq 0 ]]; then
         warn "No sites configured. Exiting."
         exit 0
     fi
 
-    info "Step 5/8: Generate Sentinel config"
-    step_install_sentinel_config "skip" "${sentinel_sources[@]}"
+    info "Step 5/7: Generate Sentinel config"
+    step_install_sentinel_config "${sentinel_sources[@]}"
 
-    info "Step 6/8: Test nginx config"
-    step_nginx_test
-
-    info "Step 7/8: Set permissions"
+    info "Step 6/7: Set permissions"
     step_set_permissions
 
-    info "Step 8/8: Reload nginx & install service"
+    info "Step 7/7: Test nginx, reload & install service"
+    step_nginx_test
     step_reload_nginx
     step_install_service
 
@@ -349,10 +333,7 @@ main() {
     echo ""
     info "Sources configured:"
     for src in "${sentinel_sources[@]}"; do
-        local s_name s_log
-        s_name="${src%%|*}"
-        s_log="${src#*|}"
-        echo "  - $s_name → $s_log"
+        echo "  - ${src%%|*} → ${src#*|}"
     done
     echo ""
     info "Next steps:"
