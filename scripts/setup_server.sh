@@ -90,7 +90,8 @@ step_patch_nginx_conf() {
 }
 
 step_detect_sites() {
-    local sites=()
+    local tmpfile="$1"
+    > "$tmpfile"
 
     for conf in "$NGINX_CONF_DIR"/*.conf; do
         [[ -f "$conf" ]] || continue
@@ -100,16 +101,18 @@ step_detect_sites() {
 
         local base
         base=$(basename "$conf" .conf)
-        sites+=("$base|$server_names|$conf")
+        printf '%s\t%s\t%s\n' "$base" "$server_names" "$conf" >> "$tmpfile"
     done
 
-    echo "${sites[@]}"
+    [[ -s "$tmpfile" ]]
 }
 
 step_configure_site() {
     local base="$1"
     local server_names="$2"
     local conf="$3"
+    local out_name="$4"
+    local out_log="$5"
     local primary_name
     primary_name=$(echo "$server_names" | awk '{print $1}')
 
@@ -153,31 +156,13 @@ step_configure_site() {
     local source_name
     source_name=$(ask "Source name for config.toml" "$base-nginx")
 
-    echo "$source_name|$access_log"
-}
-
-step_generate_sources() {
-    local sources=("$@")
-
-    echo ""
-    echo -e "${BOLD}Generated pipeline.log_sources for config.toml:${NC}"
-    echo ""
-
-    for src in "${sources[@]}"; do
-        IFS='|' read -r name path <<< "$src"
-        cat <<TOML
-[[pipeline.log_sources]]
-name = "${name}"
-path = "${path}"
-format = "nginx"
-enabled = true
-
-TOML
-    done
+    printf -v "$out_name" '%s' "$source_name"
+    printf -v "$out_log" '%s' "$access_log"
 }
 
 step_install_sentinel_config() {
-    local sentinel_sources=("$@")
+    shift
+    local sources=("$@")
 
     if [[ -f "$SENTINEL_CONFIG" ]]; then
         ok "Config exists at $SENTINEL_CONFIG"
@@ -216,12 +201,14 @@ batch_size = 5
 batch_interval = 10
 max_queue_size = 1000
 
-$(for src in "${sentinel_sources[@]}"; do
-    IFS='|' read -r name path <<< "$src"
+$(for src in "${sources[@]}"; do
+    local src_name src_log
+    src_name="${src%%|*}"
+    src_log="${src#*|}"
     cat <<TOML
 [[pipeline.log_sources]]
-name = "${name}"
-path = "${path}"
+name = "${src_name}"
+path = "${src_log}"
 format = "nginx"
 enabled = true
 
@@ -321,23 +308,23 @@ main() {
     step_patch_nginx_conf
 
     info "Step 4/8: Detect sites in $NGINX_CONF_DIR"
-    local detected
-    detected=$(step_detect_sites)
-
-    if [[ -z "$detected" ]]; then
+    local sites_file
+    sites_file=$(mktemp)
+    if ! step_detect_sites "$sites_file"; then
         error "No sites found in $NGINX_CONF_DIR"
+        rm -f "$sites_file"
         exit 1
     fi
 
     local sentinel_sources=()
-    for site in $detected; do
-        IFS='|' read -r base server_names conf <<< "$site"
-        local result
-        result=$(step_configure_site "$base" "$server_names" "$conf")
-        if [[ -n "$result" ]]; then
-            sentinel_sources+=("$result")
+    while IFS=$'\t' read -r base server_names conf; do
+        local src_name="" src_log=""
+        step_configure_site "$base" "$server_names" "$conf" src_name src_log
+        if [[ -n "$src_name" ]]; then
+            sentinel_sources+=("${src_name}|${src_log}")
         fi
-    done
+    done < "$sites_file"
+    rm -f "$sites_file"
 
     if [[ ${#sentinel_sources[@]} -eq 0 ]]; then
         warn "No sites configured. Exiting."
@@ -345,7 +332,7 @@ main() {
     fi
 
     info "Step 5/8: Generate Sentinel config"
-    step_install_sentinel_config "${sentinel_sources[@]}"
+    step_install_sentinel_config "skip" "${sentinel_sources[@]}"
 
     info "Step 6/8: Test nginx config"
     step_nginx_test
@@ -362,8 +349,10 @@ main() {
     echo ""
     info "Sources configured:"
     for src in "${sentinel_sources[@]}"; do
-        IFS='|' read -r name path <<< "$src"
-        echo "  - $name → $path"
+        local s_name s_log
+        s_name="${src%%|*}"
+        s_log="${src#*|}"
+        echo "  - $s_name → $s_log"
     done
     echo ""
     info "Next steps:"
