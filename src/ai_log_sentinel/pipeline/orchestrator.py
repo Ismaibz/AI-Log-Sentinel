@@ -59,7 +59,8 @@ class PipelineOrchestrator:
 
         self.rule_generator = RuleGenerator(config, self.anonymizer.token_store)
         self.hitl = HITLGate(mitigation_cfg)
-        self.executor = MitigationExecutor(mitigation_cfg.get("executor", {}))
+        executor_cfg = {**mitigation_cfg, **mitigation_cfg.get("executor", {})}
+        self.executor = MitigationExecutor(executor_cfg)
 
         self.dispatchers: list[AlertDispatcher] = []
         self._setup_dispatchers(alerting_cfg)
