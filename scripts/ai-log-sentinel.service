@@ -1,0 +1,25 @@
+[Unit]
+Description=AI-Log-Sentinel — autonomous log threat hunter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sentinel
+Group=sentinel
+WorkingDirectory=/opt/ai-log-sentinel
+ExecStart=/opt/ai-log-sentinel/.venv/bin/ai-log-sentinel run --config /etc/sentinel/config.toml
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+Environment=PYTHONUNBUFFERED=1
+
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+ReadWritePaths=/opt/ai-log-sentinel/data /opt/ai-log-sentinel/.offsets /var/log/nginx
+
+[Install]
+WantedBy=multi-user.target
