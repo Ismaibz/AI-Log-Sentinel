@@ -11,7 +11,7 @@ from ai_log_sentinel.config.settings import Settings
 def test_settings_loads_defaults(settings: Settings) -> None:
     assert settings.get("general.app_name") == "AI-Log-Sentinel"
     assert settings.get("general.log_level") == "INFO"
-    assert settings.get("pipeline.batch_size") == 10
+    assert settings.get("pipeline.batch_size") == 5
     assert settings.get("pipeline.batch_interval") == 30
 
 
@@ -25,8 +25,8 @@ def test_settings_user_override(tmp_path: Path) -> None:
 
 
 def test_settings_dotpath(settings: Settings) -> None:
-    assert settings.get("pipeline.batch_size") == 10
-    assert settings.get("reasoning.flash_model") == "gemini-2.5-flash"
+    assert settings.get("pipeline.batch_size") == 5
+    assert settings.get("reasoning.gemini.flash_model") == "gemini-2.5-flash"
 
 
 def test_settings_dotpath_missing(settings: Settings) -> None:

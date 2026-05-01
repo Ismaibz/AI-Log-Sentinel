@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from ai_log_sentinel.anonymizer.token_store import TokenStore
-from ai_log_sentinel.models.threat import RecommendedAction, ThreatAssessment
+from ai_log_sentinel.models.threat import (
+    RecommendedAction,
+    Severity,
+    ThreatAssessment,
+    ThreatCategory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +41,15 @@ class RuleGenerator:
         action = threat.recommended_action
         details = threat.action_details
 
-        if action in (RecommendedAction.ALERT_ONLY, RecommendedAction.INVESTIGATE):
-            return []
+        if action == RecommendedAction.INVESTIGATE:
+            action = self._infer_action(threat)
+            if action in (RecommendedAction.ALERT_ONLY, RecommendedAction.INVESTIGATE):
+                return []
+
+        if action == RecommendedAction.ALERT_ONLY:
+            action = self._infer_action(threat)
+            if action in (RecommendedAction.ALERT_ONLY, RecommendedAction.INVESTIGATE):
+                return []
 
         if action == RecommendedAction.BLOCK_IP:
             return self._block_ip_rules(details)
@@ -49,6 +61,25 @@ class RuleGenerator:
             return self._rate_limit_rules(details)
 
         return []
+
+    def _infer_action(self, threat: ThreatAssessment) -> RecommendedAction:
+        if threat.severity not in (Severity.HIGH, Severity.CRITICAL):
+            return RecommendedAction.ALERT_ONLY
+
+        if threat.category in (
+            ThreatCategory.BRUTEFORCE,
+            ThreatCategory.EXPLOIT_ATTEMPT,
+            ThreatCategory.MALICIOUS,
+        ):
+            return RecommendedAction.BLOCK_IP
+
+        if threat.category == ThreatCategory.SCAN:
+            return RecommendedAction.RATE_LIMIT
+
+        if threat.category == ThreatCategory.SUSPICIOUS:
+            return RecommendedAction.RATE_LIMIT
+
+        return RecommendedAction.ALERT_ONLY
 
     def _resolve_ip(self, value: str) -> str:
         if _IP_TOKEN_RE.match(value):

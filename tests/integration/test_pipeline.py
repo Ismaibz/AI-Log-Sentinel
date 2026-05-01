@@ -22,6 +22,7 @@ from ai_log_sentinel.models.threat import (
     ThreatCategory,
 )
 from ai_log_sentinel.reasoning.categorizer import ThreatCategorizer
+from ai_log_sentinel.reasoning.providers.base import ReasoningProvider
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
@@ -74,21 +75,25 @@ BASIC_CONFIG: dict[str, Any] = {
 }
 
 
-class MockGeminiClient:
+class MockProvider(ReasoningProvider):
     def __init__(self, responses: list[str] | None = None) -> None:
         self._responses = responses or [MALICIOUS_FLASH]
         self._call_idx = 0
-        self.flash_calls = 0
-        self.pro_calls = 0
+        self.fast_calls = 0
+        self.deep_calls = 0
 
-    async def analyze_flash(self, prompt: str, log_batch: str) -> str:
-        self.flash_calls += 1
+    async def analyze_fast(self, prompt: str) -> str:
+        self.fast_calls += 1
         idx = min(self._call_idx, len(self._responses) - 1)
+        self._call_idx += 1
         return self._responses[idx]
 
-    async def analyze_pro(self, prompt: str, log_batch: str) -> str:
-        self.pro_calls += 1
+    async def analyze_deep(self, prompt: str) -> str:
+        self.deep_calls += 1
         return PRO_ANALYSIS
+
+    async def close(self) -> None:
+        pass
 
 
 def _nginx_lines() -> list[str]:
@@ -120,26 +125,24 @@ def _tailer_config(tmp_path: Path) -> dict[str, Any]:
 @pytest.mark.integration
 class TestAnonymizationThroughPipeline:
     async def test_no_pii_in_gemini_payload(self) -> None:
-        captured_batches: list[str] = []
+        captured_prompts: list[str] = []
 
-        class CapturingClient(MockGeminiClient):
-            async def analyze_flash(self, prompt: str, log_batch: str) -> str:
-                captured_batches.append(log_batch)
-                return await super().analyze_flash(prompt, log_batch)
+        class CapturingProvider(MockProvider):
+            async def analyze_fast(self, prompt: str) -> str:
+                captured_prompts.append(prompt)
+                return await super().analyze_fast(prompt)
 
         entries = _parse_all(_nginx_lines(), "nginx-test")
         engine = AnonymizationEngine(BASIC_CONFIG)
         anonymized = [engine.anonymize(e) for e in entries]
 
-        client = CapturingClient(responses=[SCAN_FLASH])
-        categorizer = ThreatCategorizer(client=client, config=BASIC_CONFIG)
+        client = CapturingProvider(responses=[SCAN_FLASH])
+        categorizer = ThreatCategorizer(provider=client, config=BASIC_CONFIG)
         await categorizer.categorize(anonymized)
 
         ip_pattern = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
-        for batch in captured_batches:
-            assert not ip_pattern.search(
-                batch
-            ), f"PII (IP address) leaked in Gemini payload: {batch}"
+        for batch in captured_prompts:
+            assert not ip_pattern.search(batch), f"PII (IP address) leaked in payload: {batch}"
 
 
 @pytest.mark.integration
@@ -151,8 +154,8 @@ class TestParserToCategorizer:
         engine = AnonymizationEngine(BASIC_CONFIG)
         anonymized = [engine.anonymize(e) for e in entries]
 
-        client = MockGeminiClient(responses=[SCAN_FLASH])
-        categorizer = ThreatCategorizer(client=client, config=BASIC_CONFIG)
+        client = MockProvider(responses=[SCAN_FLASH])
+        categorizer = ThreatCategorizer(provider=client, config=BASIC_CONFIG)
         results = await categorizer.categorize(anonymized)
 
         assert len(results) > 0
@@ -167,12 +170,19 @@ class TestParserToCategorizer:
         engine = AnonymizationEngine(BASIC_CONFIG)
         anonymized = [engine.anonymize(e) for e in entries]
 
-        client = MockGeminiClient(responses=[MALICIOUS_FLASH])
-        categorizer = ThreatCategorizer(client=client, config=BASIC_CONFIG)
+        no_rules_config = {
+            **BASIC_CONFIG,
+            "reasoning": {
+                **BASIC_CONFIG["reasoning"],
+                "rules": {"enabled": False},
+            },
+        }
+        client = MockProvider(responses=[MALICIOUS_FLASH])
+        categorizer = ThreatCategorizer(provider=client, config=no_rules_config)
         results = await categorizer.categorize(anonymized)
 
-        assert client.pro_calls == 0
-        assert all(r.analyzed_by == "flash" for r in results)
+        assert client.deep_calls == 0
+        assert all(r.analyzed_by == "l2_fast" for r in results)
 
 
 @pytest.mark.integration

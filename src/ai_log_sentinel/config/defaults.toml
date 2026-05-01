@@ -2,10 +2,25 @@
 app_name = "AI-Log-Sentinel"
 log_level = "INFO"
 
+# ── Secrets ──────────────────────────────────────────────────────────────────
+
 [secrets]
 vault_path = "./secrets.vibe"
 project_id = "AI-Log-Sentinel"
 file_key = true
+
+# ── Ingestion ────────────────────────────────────────────────────────────────
+
+[tailer]
+poll_interval = 0.5
+offset_dir = ".offsets"
+
+[pipeline]
+batch_size = 5
+batch_interval = 30
+max_queue_size = 1000
+
+# ── Anonymization ────────────────────────────────────────────────────────────
 
 [anonymization]
 enabled = true
@@ -27,27 +42,52 @@ static_extensions = [
 health_paths = ["/health", "/healthz", "/ping", "/alive", "/ready"]
 ignore_status_codes = []
 
-[pipeline]
-batch_size = 10
-batch_interval = 30
-max_queue_size = 1000
+# ── Reasoning (L1 rules + L2 AI) ────────────────────────────────────────────
 
 [reasoning]
+provider = "gemini"
+context_window = 30
+escalation_confidence = 0.6
+
+# L1 — local pattern rules (instant, no AI)
+[reasoning.rules]
+enabled = true
+brute_force_threshold = 5
+path_fuzz_threshold = 5
+brute_force_paths = ["/login", "/auth", "/signin", "/wp-login.php", "/api/login"]
+sqli_patterns = ["UNION\\s+(ALL\\s+)?SELECT", "OR\\s+1\\s*=\\s*1", "'\\s*--", "%27", "1\\s*=\\s*1", "SELECT\\s+.*\\s+FROM"]
+traversal_patterns = ["\\.\\./", "\\.\\.%2[fF]", "\\.\\.\\\\"]
+scanner_uas = ["nikto", "sqlmap", "nmap", "dirbuster", "gobuster", "masscan", "wpscan"]
+
+# L2 deep — optional second provider for ambiguous cases
+[reasoning.l2_deep]
+enabled = false
+provider = ""
+
+# ── Provider: Gemini ────────────────────────────────────────────────────────
+
+[reasoning.gemini]
 flash_model = "gemini-2.5-flash"
 pro_model = "gemini-2.5-pro"
-escalation_confidence = 0.6
 rate_limit = 8
 rate_limit_period = 60
 request_timeout = 45
 max_retries = 5
 
-[reasoning.escalation]
-always_escalate = ["exploit_attempt", "bruteforce"]
-always_escalate_severity = ["high", "critical"]
+# ── Provider: Ollama ────────────────────────────────────────────────────────
 
-[tailer]
-poll_interval = 0.5
-offset_dir = ".offsets"
+[reasoning.ollama]
+base_url = "http://localhost:11434"
+model = "llama3"
+
+# ── Provider: OpenAI ────────────────────────────────────────────────────────
+
+[reasoning.openai]
+base_url = "https://api.openai.com/v1"
+fast_model = "gpt-4o-mini"
+deep_model = "gpt-4o"
+
+# ── Alerting ─────────────────────────────────────────────────────────────────
 
 [alerting]
 enabled = true
@@ -57,6 +97,8 @@ min_severity = "medium"
 [alerting.telegram]
 chat_id = ""
 bot_token_secret = "TELEGRAM_BOT_TOKEN"
+
+# ── Mitigation ───────────────────────────────────────────────────────────────
 
 [mitigation]
 enabled = true
@@ -72,14 +114,3 @@ nginx_config_dir = "/etc/nginx/conf.d"
 nginx_reload_cmd = "sudo nginx -s reload"
 ufw_cmd = "sudo ufw"
 rollback_on_failure = true
-
-[langgraph]
-enabled = false
-autonomy_level = "suggest"
-max_cycles = 3
-verification_delay = 60
-
-[langgraph.autonomy]
-auto_approve = []
-require_approval = ["block_ip", "block_path"]
-never_auto = ["ufw"]

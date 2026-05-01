@@ -15,6 +15,7 @@ from ai_log_sentinel.models.threat import (
 )
 from ai_log_sentinel.reasoning.categorizer import ThreatCategorizer
 from ai_log_sentinel.reasoning.escalation import should_escalate
+from ai_log_sentinel.reasoning.providers.base import ReasoningProvider
 
 FLASH_JSON = json.dumps(
     {
@@ -59,20 +60,23 @@ def _make_entry(sanitized: str, is_noise: bool = False) -> AnonymizedEntry:
     )
 
 
-class MockGeminiClient:
-    def __init__(self, flash_response: str = "", pro_response: str = ""):
-        self.flash_response = flash_response
-        self.pro_response = pro_response
-        self.flash_calls = 0
-        self.pro_calls = 0
+class MockProvider(ReasoningProvider):
+    def __init__(self, fast_response: str = "", deep_response: str = ""):
+        self._fast_response = fast_response
+        self._deep_response = deep_response
+        self.fast_calls = 0
+        self.deep_calls = 0
 
-    async def analyze_flash(self, prompt, log_batch):
-        self.flash_calls += 1
-        return self.flash_response
+    async def analyze_fast(self, prompt: str) -> str:
+        self.fast_calls += 1
+        return self._fast_response
 
-    async def analyze_pro(self, prompt, log_batch):
-        self.pro_calls += 1
-        return self.pro_response
+    async def analyze_deep(self, prompt: str) -> str:
+        self.deep_calls += 1
+        return self._deep_response
+
+    async def close(self) -> None:
+        pass
 
 
 @pytest.fixture
@@ -144,10 +148,11 @@ class TestShouldEscalate:
 @pytest.mark.unit
 class TestThreatCategorizer:
     async def _make_categorizer(
-        self, config, flash_response="", pro_response=""
-    ) -> tuple[ThreatCategorizer, MockGeminiClient]:
-        mock = MockGeminiClient(flash_response=flash_response, pro_response=pro_response)
-        cat = ThreatCategorizer(client=mock, config=config)
+        self, config, fast_response="", deep_response=""
+    ) -> tuple[ThreatCategorizer, MockProvider]:
+        mock = MockProvider(fast_response=fast_response, deep_response=deep_response)
+        deep = mock if deep_response else None
+        cat = ThreatCategorizer(provider=mock, config=config, deep_provider=deep)
         return cat, mock
 
     async def test_all_noise_returns_empty(self, categorizer_config):
@@ -155,18 +160,18 @@ class TestThreatCategorizer:
         entries = [_make_entry("noise", is_noise=True) for _ in range(3)]
         results = await cat.categorize(entries)
         assert results == []
-        assert mock.flash_calls == 0
+        assert mock.fast_calls == 0
 
     async def test_high_confidence_flash_passes_through(self, categorizer_config):
-        cat, mock = await self._make_categorizer(categorizer_config, flash_response=FLASH_JSON)
+        cat, mock = await self._make_categorizer(categorizer_config, fast_response=FLASH_JSON)
         entries = [_make_entry("GET /admin HTTP/1.1 403")]
         results = await cat.categorize(entries)
         assert len(results) == 1
-        assert results[0].analyzed_by == "flash"
+        assert results[0].analyzed_by == "l2_fast"
         assert results[0].category == ThreatCategory.SUSPICIOUS
         assert results[0].severity == Severity.MEDIUM
         assert results[0].confidence == 0.8
-        assert mock.pro_calls == 0
+        assert mock.deep_calls == 0
 
     async def test_low_confidence_triggers_pro(self, categorizer_config):
         low_flash = json.dumps(
@@ -179,14 +184,14 @@ class TestThreatCategorizer:
             }
         )
         cat, mock = await self._make_categorizer(
-            categorizer_config, flash_response=low_flash, pro_response=PRO_JSON
+            categorizer_config, fast_response=low_flash, deep_response=PRO_JSON
         )
         entries = [_make_entry("GET /admin HTTP/1.1 403")]
         results = await cat.categorize(entries)
         assert len(results) == 1
-        assert results[0].analyzed_by == "pro"
-        assert mock.flash_calls == 1
-        assert mock.pro_calls == 1
+        assert results[0].analyzed_by == "l2_deep"
+        assert mock.fast_calls == 1
+        assert mock.deep_calls == 1
 
     async def test_exploit_attempt_stays_flash(self, categorizer_config):
         exploit_flash = json.dumps(
@@ -199,16 +204,16 @@ class TestThreatCategorizer:
             }
         )
         cat, mock = await self._make_categorizer(
-            categorizer_config, flash_response=exploit_flash, pro_response=PRO_JSON
+            categorizer_config, fast_response=exploit_flash, deep_response=PRO_JSON
         )
         entries = [_make_entry("GET /../../etc/passwd HTTP/1.1 200")]
         results = await cat.categorize(entries)
         assert len(results) == 1
-        assert results[0].analyzed_by == "flash"
-        assert mock.pro_calls == 0
+        assert results[0].analyzed_by == "l2_fast"
+        assert mock.deep_calls == 0
 
     async def test_malformed_json_response(self, categorizer_config):
-        cat, _mock = await self._make_categorizer(categorizer_config, flash_response="not json")
+        cat, _mock = await self._make_categorizer(categorizer_config, fast_response="not json")
         entries = [_make_entry("GET /something HTTP/1.1 200")]
         results = await cat.categorize(entries)
         assert len(results) == 1
@@ -227,12 +232,12 @@ class TestThreatCategorizer:
             }
         )
         cat, _mock = await self._make_categorizer(
-            categorizer_config, flash_response=low_flash, pro_response="garbage{"
+            categorizer_config, fast_response=low_flash, deep_response="garbage{"
         )
         entries = [_make_entry("GET /admin HTTP/1.1 403")]
         results = await cat.categorize(entries)
         assert len(results) == 1
-        assert results[0].analyzed_by == "flash"
+        assert results[0].analyzed_by == "l2_fast"
         assert results[0].category == ThreatCategory.SUSPICIOUS
         assert results[0].confidence == 0.3
 
@@ -247,8 +252,8 @@ class TestThreatCategorizer:
                 },
             }
         }
-        cat, mock = await self._make_categorizer(small_batch_config, flash_response=FLASH_JSON)
+        cat, mock = await self._make_categorizer(small_batch_config, fast_response=FLASH_JSON)
         entries = [_make_entry(f"GET /page{i} HTTP/1.1 200") for i in range(5)]
         results = await cat.categorize(entries)
         assert len(results) == 3
-        assert mock.flash_calls == 3
+        assert mock.fast_calls == 3

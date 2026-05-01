@@ -21,20 +21,26 @@ from ai_log_sentinel.models.anonymized_entry import AnonymizedEntry
 from ai_log_sentinel.models.log_entry import LogEntry
 from ai_log_sentinel.models.threat import Severity, ThreatCategory
 from ai_log_sentinel.reasoning.categorizer import ThreatCategorizer
-from ai_log_sentinel.reasoning.gemini_client import GeminiClient
+from ai_log_sentinel.reasoning.providers import create_deep_provider, create_provider
 
 logger = logging.getLogger(__name__)
 
 
 class PipelineOrchestrator:
-    def __init__(self, config: dict[str, Any], api_key: str) -> None:
+    def __init__(self, config: dict[str, Any], api_key: str = "") -> None:
         self.config = config
         pipeline_cfg = config.get("pipeline", {})
         self.sources = load_sources(config)
         self.parsers = build_parsers()
         self.anonymizer = AnonymizationEngine(config)
-        self.client = GeminiClient(api_key=api_key, config=config)
-        self.categorizer = ThreatCategorizer(client=self.client, config=config)
+        self._anonymization_enabled = config.get("anonymization", {}).get("enabled", True)
+        self.provider = create_provider(config, api_key)
+        deep_provider = create_deep_provider(config, api_key)
+        self.categorizer = ThreatCategorizer(
+            provider=self.provider,
+            config=config,
+            deep_provider=deep_provider,
+        )
         self.queue: asyncio.Queue[LogEntry] = asyncio.Queue(
             maxsize=pipeline_cfg.get("max_queue_size", 1000)
         )
@@ -162,10 +168,20 @@ class PipelineOrchestrator:
                 await self._process_batch(buffer[i : i + self.batch_size])
 
     async def _process_batch(self, batch: list[LogEntry]) -> None:
-        anonymized_entries: list[AnonymizedEntry] = []
-        for entry in batch:
-            anonymized = self.anonymizer.anonymize(entry)
-            anonymized_entries.append(anonymized)
+        if self._anonymization_enabled:
+            anonymized_entries: list[AnonymizedEntry] = []
+            for entry in batch:
+                anonymized = self.anonymizer.anonymize(entry)
+                anonymized_entries.append(anonymized)
+        else:
+            anonymized_entries = [
+                AnonymizedEntry(
+                    original=entry,
+                    sanitized_line=entry.raw_line,
+                    is_noise=False,
+                )
+                for entry in batch
+            ]
 
         if not anonymized_entries:
             return

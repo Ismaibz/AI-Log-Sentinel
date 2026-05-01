@@ -29,7 +29,14 @@ def run(config: str | None, verbose: bool) -> None:
     settings = Settings(config_path=config)
 
     async def _start() -> None:
-        api_key = await settings.get_secret("GEMINI_API_KEY")
+        provider_name = settings.get("reasoning.provider", "gemini")
+        deep_provider_name = settings.get("reasoning.l2_deep.provider", "")
+
+        if provider_name == "ollama" and deep_provider_name != "gemini":
+            api_key = ""
+        else:
+            with contextlib.suppress(Exception):
+                api_key = await settings.get_secret("GEMINI_API_KEY")
 
         telegram_secret_key = settings.get("alerting.telegram.bot_token_secret", "")
         if telegram_secret_key:
@@ -43,7 +50,7 @@ def run(config: str | None, verbose: bool) -> None:
         orchestrator = PipelineOrchestrator(config=settings.raw, api_key=api_key)
         click.echo(
             f"Pipeline starting "
-            f"(model={settings.get('reasoning.flash_model')}, "
+            f"(provider={provider_name}, "
             f"sources={len(orchestrator.sources)})"
         )
         await orchestrator.run()

@@ -225,3 +225,5 @@ devinDeepWiki.json
 .offsets/
 tasks/
 data/
+logs/
+scripts/
