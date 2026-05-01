@@ -36,7 +36,7 @@ def run(config: str | None, verbose: bool) -> None:
             api_key = ""
         else:
             with contextlib.suppress(Exception):
-                api_key = await settings.get_secret("GEMINI_API_KEY")
+                api_key = await settings.get_secret("LLM_API_KEY")
 
         telegram_secret_key = settings.get("alerting.telegram.bot_token_secret", "")
         if telegram_secret_key:
@@ -75,7 +75,7 @@ def test_config() -> None:
 
     async def _check_secrets() -> tuple[bool, str]:
         try:
-            await settings.get_secret("GEMINI_API_KEY")
+            await settings.get_secret("LLM_API_KEY")
             return True, ""
         except Exception as exc:
             return False, str(exc)
