@@ -1,0 +1,4 @@
+sentinel ALL=(root) NOPASSWD: /usr/sbin/nginx -t
+sentinel ALL=(root) NOPASSWD: /usr/sbin/nginx -s reload
+sentinel ALL=(root) NOPASSWD: /usr/sbin/ufw deny from *
+sentinel ALL=(root) NOPASSWD: /usr/sbin/ufw delete deny from *

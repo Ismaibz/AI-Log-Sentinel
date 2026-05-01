@@ -259,6 +259,25 @@ step_set_permissions() {
     ok "Permissions set for sentinel user"
 }
 
+step_install_sudoers() {
+    local sudoers_src="${SENTINEL_APP_DIR}/scripts/sentinel-sudoers"
+    if [[ ! -f "$sudoers_src" ]]; then
+        warn "sudoers file not found at $sudoers_src"
+        return
+    fi
+
+    local target="/etc/sudoers.d/sentinel"
+    cp "$sudoers_src" "$target"
+    chmod 440 "$target"
+    if visudo -c -f "$target" >/dev/null 2>&1; then
+        ok "Sudoers installed at $target (sentinel can run nginx/ufw commands)"
+    else
+        error "Sudoers syntax error — removing $target"
+        rm -f "$target"
+        return 1
+    fi
+}
+
 step_reload_nginx() {
     if ask_yes "Reload nginx now?" "y"; then
         nginx -s reload
@@ -293,16 +312,16 @@ main() {
 
     require_root
 
-    info "Step 1/7: Create system user"
+    info "Step 1/8: Create system user"
     step_create_user
 
-    info "Step 2/7: Create sentinel nginx directory"
+    info "Step 2/8: Create sentinel nginx directory"
     step_create_sentinel_dir
 
-    info "Step 3/7: Patch nginx.conf"
+    info "Step 3/8: Patch nginx.conf"
     step_patch_nginx_conf
 
-    info "Step 4/7: Configure sites"
+    info "Step 4/8: Configure sites"
     local sentinel_sources=()
     for conf in "$NGINX_CONF_DIR"/*.conf; do
         [[ -f "$conf" ]] || continue
@@ -317,13 +336,14 @@ main() {
         exit 0
     fi
 
-    info "Step 5/7: Generate Sentinel config"
+    info "Step 5/8: Generate Sentinel config"
     step_install_sentinel_config "${sentinel_sources[@]}"
 
-    info "Step 6/7: Set permissions"
+    info "Step 6/8: Set permissions & sudoers"
     step_set_permissions
+    step_install_sudoers
 
-    info "Step 7/7: Test nginx, reload & install service"
+    info "Step 7/8: Test nginx, reload & install service"
     step_nginx_test
     step_reload_nginx
     step_install_service

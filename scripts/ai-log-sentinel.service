@@ -18,8 +18,7 @@ Environment=PYTHONUNBUFFERED=1
 
 ProtectSystem=strict
 ProtectHome=read-only
-NoNewPrivileges=true
-ReadWritePaths=/opt/ai-log-sentinel/data /opt/ai-log-sentinel/.offsets /var/log/nginx
+ReadWritePaths=/opt/ai-log-sentinel/data /opt/ai-log-sentinel/.offsets /var/log/nginx /etc/nginx/sentinel.d
 
 [Install]
 WantedBy=multi-user.target
