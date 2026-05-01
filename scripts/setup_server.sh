@@ -172,9 +172,6 @@ step_install_sentinel_config() {
 
     mkdir -p "$(dirname "$SENTINEL_CONFIG")"
 
-    local api_key
-    api_key=$(ask "Gemini API key (or leave empty to set later)" "")
-
     local sources_block=""
     for src in "${sources[@]}"; do
         local src_name="${src%%|*}"
@@ -213,9 +210,6 @@ max_queue_size = 1000
 
 ${sources_block}[reasoning]
 provider = "gemini"
-
-[reasoning.gemini]
-api_key = "${api_key}"
 
 [reasoning.l2_deep]
 enabled = true
